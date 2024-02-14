@@ -15,7 +15,9 @@ class EmojiArtDocument: ObservableObject {
         didSet {
             autosave()
             if emojiArt.background != oldValue.background {
-                fetchBackgroundImage()
+                Task {
+                    await fetchBackgroundImage()
+                }
             }
         }
     }
@@ -47,6 +49,17 @@ class EmojiArtDocument: ObservableObject {
         emojiArt.emojis
     }
     
+    var bbox: CGRect {
+        var bbox = CGRect.zero
+        for emoji in emojiArt.emojis {
+            bbox = bbox.union(emoji.bbox)
+        }
+        if let backgroundSize = background.uiImage?.size {
+            bbox = bbox.union(CGRect(center: .zero, size: backgroundSize))
+        }
+        return bbox
+    }
+    
 //    var background: URL? {
 //        emojiArt.background
 //    }
@@ -55,11 +68,15 @@ class EmojiArtDocument: ObservableObject {
     
     // MARK: - Background Image
     
+    @MainActor
     private func fetchBackgroundImage() async {
         if let url = emojiArt.background{
             background = .fetching(url)
             do {
-                background = .found(try await fetchUIImage(from:url))
+                let image = try await fetchUIImage(from:url)
+                if url == emojiArt.background {
+                    background = .found(image)
+                }
             } catch {
                 background = .failed("Couldn't set background: \(error.localizedDescription)")
             }
@@ -149,11 +166,17 @@ extension EmojiArt.Emoji {
     var font: Font {
         Font.system(size: CGFloat(size))
     }
+    var bbox: CGRect {
+        CGRect(
+            center: position.in(nil),
+            size: CGSize(width: CGFloat(size), height: CGFloat(size))
+        )
+    }
 }
 
 extension EmojiArt.Emoji.Position {
-    func `in`(_ geometry: GeometryProxy) -> CGPoint {
-        let center = geometry.frame(in: .local).center
+    func `in`(_ geometry: GeometryProxy?) -> CGPoint {
+        let center = geometry?.frame(in: .local).center ?? .zero
         return CGPoint(x: center.x + CGFloat(x), y: center.y - CGFloat(y))
     }
 }
